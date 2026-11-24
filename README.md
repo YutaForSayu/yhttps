@@ -18,13 +18,18 @@ Runs on **Linux**, **macOS**, **Windows** and **Android/Termux**.
 
 ### Prebuilt binary
 
-Download the archive for your platform from
-[GitHub releases](https://github.com/YutaForSayu/yhttps/releases), then:
+Download the bare binary for your platform from
+[GitHub releases](https://github.com/YutaForSayu/yhttps/releases):
 
 ```bash
-tar xzf yhtps-<target>.tar.gz
-sudo install -m 0755 yhtps /usr/local/bin/yhtps
+curl -L -O https://github.com/YutaForSayu/yhttps/releases/latest/download/yhtps-linux-x86_64
+chmod +x yhtps-linux-x86_64
+sudo install -m 0755 yhtps-linux-x86_64 /usr/local/bin/yhtps
 ```
+
+Available: `yhtps-linux-x86_64`, `yhtps-linux-x86_64-static` (no glibc),
+`yhtps-linux-aarch64-static`, `yhtps-windows-x86_64.exe`, `yhtps-macos-x86_64`,
+`yhtps-macos-aarch64`, plus `SHA256SUMS.txt`.
 
 ### From source (any platform)
 

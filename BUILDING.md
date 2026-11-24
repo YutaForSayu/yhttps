@@ -132,6 +132,14 @@ Each target is first attempted **with** TLS and retried with
 `--no-default-features` if that fails, so the archive always corresponds to a
 binary that actually built.
 
+`scripts/collect-binaries.sh` then copies each built binary out of
+`target/<triple>/release/` under a plain platform name and writes
+`SHA256SUMS.txt`; `--upload <tag>` attaches them to a GitHub release:
+
+```bash
+bash scripts/collect-binaries.sh --upload v1.0.0
+```
+
 ## `make` targets
 
 See the `Makefile` in the repository root:
