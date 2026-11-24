@@ -1,0 +1,171 @@
+.TH YHTPS 1 "2026" "YhHTTPServer 1.0.0" "User Commands"
+.SH NAME
+yhtps \- YhHTTPServer, a zero\-config static and framework HTTP server
+.SH SYNOPSIS
+.B yhtps
+.B s
+.I PATH
+.RI [ OPTIONS ]
+.br
+.B yhtps
+.B sf
+.I PATH
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B yhtps
+serves static files and built framework output (Vite, Next.js export,
+SvelteKit, Astro, plain HTML) straight from the filesystem. It is a single
+native binary with no runtime dependencies and runs on Linux, macOS, Windows
+and Android/Termux.
+.PP
+It covers the same ground as the npm packages
+.B http-server
+and
+.BR serve .
+.SH COMMANDS
+.TP
+.B s
+Serve a file or a directory. The path is auto\-detected: a directory is served
+with index\-file lookup and (by default) directory listings; a file is served
+at
+.BR / .
+.TP
+.B sf
+Serve a framework build folder. Adds client\-side routing (SPA fallback) and
+clean URLs: unknown paths return the fallback file, and
+.B /about
+is served from
+.B about.html
+when it exists.
+.SH OPTIONS
+.TP
+.BR \-p ", " \-\-port " " \fIPORT\fR
+Port to listen on. Default: 5050.
+.TP
+.BR \-a ", " \-\-address " " \fIADDRESS\fR
+Address to bind. Default: 0.0.0.0 (all interfaces).
+.TP
+.B \-\-clean
+Disable request logging.
+.TP
+.B \-\-silent
+Suppress all output, banner included.
+.TP
+.BR \-c ", " \-\-cache " " \fISECONDS\fR
+Cache\-Control max\-age. \-1 disables caching. Default: 3600.
+.TP
+.BR \-g ", " \-\-gzip
+Enable gzip compression.
+.TP
+.BR \-b ", " \-\-brotli
+Enable brotli compression. Preferred over gzip when the client allows both.
+.TP
+.B \-\-compress\-threshold \fIBYTES\fR
+Minimum size worth compressing. Default: 1024.
+.TP
+.B \-\-cors
+Send permissive CORS headers.
+.TP
+.B \-\-cors\-origin \fIORIGIN\fR
+Custom Access\-Control\-Allow\-Origin value. Implies \-\-cors.
+.TP
+.BR \-o ", " \-\-open
+Open the served URL in the default browser.
+.TP
+.B \-\-spa
+Force SPA fallback: unknown paths serve the fallback file.
+.TP
+.B \-\-fallback \fIFILE\fR
+SPA fallback file. Default: index.html.
+.TP
+.B \-\-no\-listing
+Disable directory listings.
+.TP
+.BR \-i ", " \-\-index " " \fIFILE,...\fR
+Index file names to try in a directory. Default: index.html,index.htm.
+.TP
+.BR \-e ", " \-\-extensions " " \fIEXT,...\fR
+Extra extensions to try for extension\-less requests, e.g.
+.B \-e html
+serves
+.B /about
+from
+.BR about.html .
+.TP
+.BR \-P ", " \-\-proxy " " \fIURL\fR
+Proxy requests to this origin. Without \-\-proxy\-prefix it acts as a fallback:
+anything that is not a file on disk is forwarded upstream.
+.TP
+.B \-\-proxy\-prefix \fIPATH\fR
+Only proxy paths starting with
+.IR PATH ,
+e.g.
+.BR "\-\-proxy\-prefix /api" .
+Everything else is served locally, so SPA routing keeps working.
+.TP
+.B \-\-username \fIUSER\fR
+HTTP Basic auth user name.
+.TP
+.B \-\-password \fIPASS\fR
+HTTP Basic auth password.
+.TP
+.BR \-S ", " \-\-ssl
+Serve over HTTPS. A self\-signed certificate is generated when none is given.
+.TP
+.BR \-C ", " \-\-cert " " \fIFILE\fR
+TLS certificate chain, PEM.
+.TP
+.BR \-K ", " \-\-key " " \fIFILE\fR
+TLS private key, PEM.
+.TP
+.B \-\-no\-range
+Disable byte\-range requests.
+.TP
+.B \-\-timeout \fISECONDS\fR
+Connection header read timeout.
+.TP
+.B \-\-header "\fIName: Value\fR"
+Extra response header. Repeatable.
+.TP
+.B \-\-log\-format \fIFORMAT\fR
+One of
+.BR pretty " (default), " short ", " combined ", " json .
+.TP
+.B \-\-no\-color
+Disable coloured output. Also honoured via the NO_COLOR environment variable.
+.TP
+.B \-\-trust\-proxy
+Trust X\-Forwarded\-For / X\-Real\-IP when determining the client IP.
+.SH EXAMPLES
+Serve a single static page:
+.PP
+.RS 4
+yhtps s /var/www/html/index.html
+.RE
+.PP
+Serve a Vite build on port 8080 and open a browser:
+.PP
+.RS 4
+yhtps sf /var/www/html/blog/dist/ \-p 8080 \-o
+.RE
+.PP
+Serve quietly, with compression and CORS:
+.PP
+.RS 4
+yhtps s ./public \-\-clean \-\-gzip \-\-brotli \-\-cors
+.RE
+.PP
+Serve an SPA and proxy its API:
+.PP
+.RS 4
+yhtps sf ./dist \-P http://127.0.0.1:3000 \-\-proxy\-prefix /api
+.RE
+.SH EXIT STATUS
+.TP
+.B 0
+Clean shutdown.
+.TP
+.B 1
+Startup failure: bad path, port already in use, invalid certificate, and so on.
+.SH SEE ALSO
+The project README and BUILDING.md for cross\-compilation recipes.

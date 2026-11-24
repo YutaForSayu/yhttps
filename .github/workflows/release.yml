@@ -1,0 +1,85 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-musl,  tls: false }
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-musl, tls: false }
+          - { os: ubuntu-latest,  target: x86_64-pc-windows-gnu,      tls: false, ext: ".exe" }
+          - { os: macos-latest,   target: aarch64-apple-darwin,       tls: true  }
+          - { os: macos-latest,   target: x86_64-apple-darwin,        tls: true  }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: cross toolchain (musl / mingw)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools gcc-mingw-w64-x86-64
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-musl" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          fi
+          if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
+            echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> $GITHUB_ENV
+          fi
+
+      - name: cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: build
+        run: |
+          if [ "${{ matrix.tls }}" = "true" ]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }} --no-default-features
+          fi
+        shell: bash
+
+      - name: package
+        shell: bash
+        run: |
+          set -e
+          BIN="target/${{ matrix.target }}/release/yhtps${{ matrix.ext }}"
+          NAME="yhtps-${{ matrix.target }}"
+          mkdir -p dist
+          cp "$BIN" "dist/yhtps${{ matrix.ext }}"
+          cp README.md LICENSE BUILDING.md dist/
+          (cd dist && tar czf "../$NAME.tar.gz" .)
+          ls -la dist "dist/$NAME.tar.gz" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yhtps-${{ matrix.target }}
+          path: yhtps-${{ matrix.target }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "*.tar.gz"
