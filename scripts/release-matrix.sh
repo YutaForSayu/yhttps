@@ -40,6 +40,12 @@ else
   echo "note: Apple targets are skipped here (no macOS SDK); CI builds them on macOS."
 fi
 
+# Allow the caller to narrow the set (CI runs one job per Apple target).
+if [ -n "${YHTPS_TARGETS:-}" ]; then
+  read -r -a TARGETS <<< "$YHTPS_TARGETS"
+  echo "restricting to: ${TARGETS[*]}"
+fi
+
 for t in "${TARGETS[@]}"; do
   rustup target add "$t" >/dev/null 2>&1 || true
 done

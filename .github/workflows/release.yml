@@ -86,6 +86,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build
+        env:
+          # one job per Apple target — don't rebuild both in each job
+          YHTPS_TARGETS: ${{ matrix.target }}
         run: bash scripts/release-matrix.sh dist
 
       - name: Collect bare binaries
