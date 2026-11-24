@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
-# Build and package yhtps for every target we can reach from Linux, then
-# write SHA256SUMS.txt. Records a TSV status table so failures are explicit.
+# Build yhtps for every target reachable from THIS host.
 #
-#   bash scripts/release-matrix.sh <out-dir>
+#   bash scripts/release-matrix.sh [out-dir]
 #
-# Each target is first attempted WITH TLS (default features); if that fails the
-# target is retried with --no-default-features and the result is recorded as
-# "ok (no tls)" rather than silently claiming success.
+# Linux/Windows targets use `cargo zigbuild`: zig supplies the cross C/linker
+# toolchain, which is what lets ring — and therefore TLS — cross-compile.
+#
+# Apple targets can only be built on macOS. zig has no macOS SDK, so
+# `-framework CoreFoundation` cannot resolve from Linux; on a non-macOS host
+# they are skipped rather than reported as failures. CI builds them on a macOS
+# runner.
+#
+# Nothing is packaged here — scripts/collect-binaries.sh turns the built
+# binaries into release assets. A TSV table records what happened, so a target
+# that only built without TLS is visible instead of silently downgraded.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -17,82 +24,60 @@ mkdir -p "$OUT"
 STATUS="$OUT/build-status.tsv"
 : > "$STATUS"
 
-TARGETS=(
-  x86_64-unknown-linux-gnu
-  x86_64-unknown-linux-musl
-  aarch64-unknown-linux-musl
-  x86_64-pc-windows-gnu
-  x86_64-apple-darwin
-  aarch64-apple-darwin
-)
+HOST_OS="$(uname -s)"
 
-# rustup targets, minus the native one which is already installed.
+if [ "$HOST_OS" = "Darwin" ]; then
+  TARGETS=(x86_64-apple-darwin aarch64-apple-darwin)
+  MODE=native
+else
+  TARGETS=(
+    x86_64-unknown-linux-gnu
+    x86_64-unknown-linux-musl
+    aarch64-unknown-linux-musl
+    x86_64-pc-windows-gnu
+  )
+  MODE=cross
+  echo "note: Apple targets are skipped here (no macOS SDK); CI builds them on macOS."
+fi
+
 for t in "${TARGETS[@]}"; do
   rustup target add "$t" >/dev/null 2>&1 || true
 done
 
-# cargo-zigbuild sets CC/CXX/AR and the linker itself (to `zig cc`), which is
-# what lets ring — and therefore TLS — cross-compile. Do not override them here.
-
+# On macOS the native toolchain is all that is needed; elsewhere zig does the
+# cross-linking. Never override CC/linker here — cargo-zigbuild sets them.
 build_one() {
-  local t="$1" tls="$2"
-  local dir="target/$t/release"
-  if [ "$t" = "x86_64-unknown-linux-gnu" ]; then
-    if [ "$tls" = tls ]; then
-      cargo build --release --target "$t"
-    else
-      cargo build --release --target "$t" --no-default-features
-    fi
-  else
-    if [ "$tls" = tls ]; then
-      cargo zigbuild --release --target "$t"
-    else
-      cargo zigbuild --release --target "$t" --no-default-features
-    fi
-  fi
-  [ -f "$dir/yhtps" ] || [ -f "$dir/yhtps.exe" ]
-}
-
-package() {
   local t="$1" flavor="$2"
-  local dir="target/$t/release"
-  local stage; stage="$(mktemp -d)"
-  cp README.md LICENSE BUILDING.md "$stage/"
-  local binname=yhtps
-  [[ "$t" == *windows* ]] && binname=yhtps.exe
-  cp "$dir/$binname" "$stage/"
-  chmod +x "$stage/$binname" 2>/dev/null
-  local archive="$OUT/yhtps-$t.tar.gz"
-  tar -czf "$archive" -C "$stage" .
-  rm -rf "$stage"
-  local size; size=$(du -h "$archive" | cut -f1)
-  printf '%s\t%s\t%s\t%s\n' "$t" "$flavor" "ok" "$size" >> "$STATUS"
-  echo "  packaged $archive ($size)"
+  local args=(--release --target "$t")
+  [ "$flavor" = notls ] && args+=(--no-default-features)
+  if [ "$MODE" = native ]; then
+    cargo build "${args[@]}"
+  else
+    cargo zigbuild "${args[@]}"
+  fi
+  [ -f "target/$t/release/yhtps" ] || [ -f "target/$t/release/yhtps.exe" ]
 }
 
 for t in "${TARGETS[@]}"; do
   echo "=== $t ==="
   if build_one "$t" tls; then
-    package "$t" "tls"
+    printf '%s\ttls\tok\t-\n' "$t" >> "$STATUS"
+    echo "  ok (tls)"
   elif build_one "$t" notls; then
-    echo "  (TLS build failed; shipping the no-TLS binary for this target)"
-    package "$t" "no-tls"
+    printf '%s\tno-tls\tok\t-\n' "$t" >> "$STATUS"
+    echo "  ok (no-tls fallback — https flags unavailable in this binary)"
   else
     printf '%s\t-\tFAILED\t-\n' "$t" >> "$STATUS"
     echo "  !! BUILD FAILED for $t"
   fi
 done
 
-# ---- source tarball ------------------------------------------------------
-SRC="$OUT/yhttps-1.0.0-src.tar.gz"
-git archive --format=tar.gz --prefix=yhttps-1.0.0/ -o "$SRC" HEAD
-echo "  packaged $SRC ($(du -h "$SRC" | cut -f1))"
-
-# ---- checksums -----------------------------------------------------------
-( cd "$OUT" && sha256sum ./*.tar.gz > SHA256SUMS.txt )
 echo
 echo "=== status ==="
-column -t -s$'\t' "$STATUS" 2>/dev/null || cat "$STATUS"
-echo
-echo "=== assets in $OUT ==="
-ls -la "$OUT"
+while IFS=$'\t' read -r a b c _; do printf '  %-28s %-7s %s\n' "$a" "$b" "$c"; done < "$STATUS"
+
+if grep -q FAILED "$STATUS"; then
+  echo
+  echo "error: at least one target failed to build" >&2
+  exit 1
+fi

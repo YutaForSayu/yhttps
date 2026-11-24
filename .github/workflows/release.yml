@@ -11,8 +11,10 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: build release matrix
+  # Linux + Windows. zig acts as the cross C/linker compiler, which is what
+  # lets ring (and therefore TLS) cross-compile.
+  build-posix:
+    name: build linux + windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +22,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: "x86_64-unknown-linux-gnu,x86_64-unknown-linux-musl,aarch64-unknown-linux-musl,x86_64-pc-windows-gnu,x86_64-apple-darwin,aarch64-apple-darwin"
+          targets: "x86_64-unknown-linux-gnu,x86_64-unknown-linux-musl,aarch64-unknown-linux-musl,x86_64-pc-windows-gnu"
 
       - name: Install cross toolchains
         run: |
@@ -56,28 +58,47 @@ jobs:
       - name: Build
         run: bash scripts/release-matrix.sh dist
 
-      - name: Show build status
-        run: cat dist/build-status.tsv
+      - name: Collect bare binaries
+        run: bash scripts/collect-binaries.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yhtps-posix
+          path: dist/yhtps-*
+
+  # Apple targets need a real macOS SDK: from Linux, zig cannot resolve
+  # `-framework CoreFoundation`, so these must be built natively.
+  build-macos:
+    name: build macos (${{ matrix.target }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: bash scripts/release-matrix.sh dist
 
       - name: Collect bare binaries
         run: bash scripts/collect-binaries.sh
 
-      - name: List what will ship
-        run: ls -la dist/
-
       - uses: actions/upload-artifact@v4
         with:
-          name: yhtps-dist
-          # the bare binaries, not the .tar.gz build intermediates
-          path: |
-            dist/yhtps-*
-            !dist/*.tar.gz
-            dist/SHA256SUMS.txt
-            dist/build-status.tsv
+          name: yhtps-${{ matrix.target }}
+          path: dist/yhtps-*
 
   release:
     name: attach assets to the release
-    needs: build
+    needs: [build-posix, build-macos]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -85,8 +106,17 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: yhtps-dist
+          pattern: yhtps-*
+          merge-multiple: true
           path: dist
+
+      - name: Recompute checksums over the full set
+        run: |
+          set -euo pipefail
+          cd dist
+          rm -f SHA256SUMS.txt
+          sha256sum yhtps-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Upload assets
         env:
@@ -97,8 +127,7 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "$tag" --generate-notes
           fi
-          # bare binaries only — never the .tar.gz build intermediates
-          mapfile -t assets < <(find dist -maxdepth 1 -type f ! -name '*.tar.gz' -printf '%p\n' | sort)
+          mapfile -t assets < <(find dist -maxdepth 1 -type f -printf '%p\n' | sort)
           printf 'uploading:\n'; printf '  %s\n' "${assets[@]}"
           gh release upload "$tag" "${assets[@]}" --clobber
           gh release view "$tag" --json tagName,assets \
