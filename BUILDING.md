@@ -112,16 +112,39 @@ cargo zigbuild --release --target x86_64-pc-windows-gnu
 
 ---
 
+## Building the whole release matrix
+
+`scripts/release-matrix.sh` builds and packages every target reachable from a
+Linux host, writes `SHA256SUMS.txt`, and records a status table so a failed
+target is reported rather than silently skipped:
+
+```bash
+bash scripts/release-matrix.sh dist     # or: make dist
+cat dist/build-status.tsv
+```
+
+It needs `musl-tools`, `gcc-mingw-w64-x86-64`, and
+[zig](https://ziglang.org/download/) + `cargo install cargo-zigbuild` (zig acts
+as the cross C/link compiler, which is what lets ring — and therefore TLS —
+cross-compile).
+
+Each target is first attempted **with** TLS and retried with
+`--no-default-features` if that fails, so the archive always corresponds to a
+binary that actually built.
+
 ## `make` targets
 
 See the `Makefile` in the repository root:
 
 ```bash
 make            # native release build
+make pure       # native build without TLS (pure Rust, no C deps)
+make dist       # full release matrix -> dist/ + SHA256SUMS.txt
 make musl       # static musl x86_64
 make windows    # x86_64-pc-windows-gnu
 make macos      # both macOS slices + universal binary (needs a Mac)
 make arm64      # linux aarch64
-make all        # everything that works on this host
-make test       # unit + integration tests
+make test       # unit tests
+make smoke      # end-to-end HTTP checks against the built binary
+make all        # alias for release
 ```

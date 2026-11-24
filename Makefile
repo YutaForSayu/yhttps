@@ -7,7 +7,7 @@ BIN       = yhtps
 TARGETDIR = target
 
 .PHONY: help all build release debug musl arm64 windows macos test smoke fmt \
-        clippy check clean install uninstall dist
+        clippy check clean install uninstall dist pure
 
 help: ## show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -25,8 +25,12 @@ release: ## optimised native build
 	@echo
 	@echo "binary: $(TARGETDIR)/release/$(BIN)"
 
-dist: release ## release build without TLS (pure Rust, no C deps)
+pure: ## release build without TLS (pure Rust, no C deps)
 	$(CARGO) build --release --no-default-features
+
+dist: ## build + package the full release matrix into dist/
+	bash scripts/release-matrix.sh dist
+	@echo && ls -la dist
 
 musl: ## static x86_64 Linux binary (no glibc)
 	rustup target add x86_64-unknown-linux-musl

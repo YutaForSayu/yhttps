@@ -16,6 +16,16 @@ Runs on **Linux**, **macOS**, **Windows** and **Android/Termux**.
 
 ## Install
 
+### Prebuilt binary
+
+Download the archive for your platform from
+[GitHub releases](https://github.com/YutaForSayu/yhttps/releases), then:
+
+```bash
+tar xzf yhtps-<target>.tar.gz
+sudo install -m 0755 yhtps /usr/local/bin/yhtps
+```
+
 ### From source (any platform)
 
 ```bash
@@ -196,15 +206,19 @@ yhtps s ./public --header "X-Frame-Options: DENY" --header "Referrer-Policy: no-
 
 ## Platform support
 
-| Platform        | Status | Notes                                                     |
-| --------------- | ------ | --------------------------------------------------------- |
-| Linux x86_64    | ✅     | static musl build available (`make musl`)                  |
-| Linux aarch64   | ✅     | `make cross-linux-arm64`                                   |
-| macOS (x86/ARM) | ✅     | `make macos`                                               |
-| Windows         | ✅     | `make windows`                                             |
-| Android/Termux  | ✅     | `pkg install rust` then `cargo build --release`            |
+| Platform        | Status | Notes                                                      |
+| --------------- | ------ | ---------------------------------------------------------- |
+| Linux x86_64    | ✅     | static musl build available (`make musl`, or `make dist`)   |
+| Linux aarch64   | ✅     | `make arm64`                                                |
+| macOS (x86/ARM) | ✅     | `make macos`, or `make dist` via zig                        |
+| Windows         | ✅     | `make windows`                                              |
+| Android/Termux  | ✅     | `pkg install rust` then `cargo build --release`             |
 
-See [`BUILDING.md`](BUILDING.md) for cross-compilation recipes.
+Prebuilt binaries for all of the above are attached to
+[GitHub releases](https://github.com/YutaForSayu/yhttps/releases).
+See [`BUILDING.md`](BUILDING.md) for cross-compilation recipes, and
+`bash scripts/release-matrix.sh dist` (or `make dist`) to produce the whole
+matrix yourself.
 
 ---
 
