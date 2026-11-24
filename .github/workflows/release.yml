@@ -53,17 +53,25 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build and package
+      - name: Build
         run: bash scripts/release-matrix.sh dist
 
       - name: Show build status
         run: cat dist/build-status.tsv
 
+      - name: Collect bare binaries
+        run: bash scripts/collect-binaries.sh
+
+      - name: List what will ship
+        run: ls -la dist/
+
       - uses: actions/upload-artifact@v4
         with:
           name: yhtps-dist
+          # the bare binaries, not the .tar.gz build intermediates
           path: |
-            dist/*.tar.gz
+            dist/yhtps-*
+            !dist/*.tar.gz
             dist/SHA256SUMS.txt
             dist/build-status.tsv
 
@@ -89,6 +97,9 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "$tag" --generate-notes
           fi
-          gh release upload "$tag" dist/*.tar.gz dist/SHA256SUMS.txt --clobber
+          # bare binaries only — never the .tar.gz build intermediates
+          mapfile -t assets < <(find dist -maxdepth 1 -type f ! -name '*.tar.gz' -printf '%p\n' | sort)
+          printf 'uploading:\n'; printf '  %s\n' "${assets[@]}"
+          gh release upload "$tag" "${assets[@]}" --clobber
           gh release view "$tag" --json tagName,assets \
             --jq '.tagName, (.assets[] | "  \(.name)  \(.size) bytes")'
